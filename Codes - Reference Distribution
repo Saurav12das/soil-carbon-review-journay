@@ -1,0 +1,83 @@
+# If you haven't installed these packages yet, run:
+# install.packages("stringr")
+# install.packages("ggplot2")
+
+library(stringr)
+library(ggplot2)
+
+# Read all lines from the file
+refs_raw <- readLines("reference.txt")
+
+# Combine lines into individual reference blocks.
+# We assume each reference starts with a line that begins with one or more digits followed by a period.
+refs_combined <- c()
+current_ref <- ""
+for (line in refs_raw) {
+  # Check if the line starts with a reference number (e.g., "1." or "12.")
+  if (grepl("^[0-9]+\\.", line)) {
+    # If we already have a reference in progress, append it to our list
+    if (nzchar(current_ref)) {
+      refs_combined <- c(refs_combined, current_ref)
+    }
+    # Start a new reference with the current line
+    current_ref <- line
+  } else {
+    # Otherwise, append the line to the current reference (with a space in between)
+    current_ref <- paste(current_ref, line)
+  }
+}
+# Append the final reference if it exists
+if (nzchar(current_ref)) {
+  refs_combined <- c(refs_combined, current_ref)
+}
+
+# Check how many references were detected
+total_refs <- length(refs_combined)
+cat("Total references detected:", total_refs, "\n")  # Should be 204 if all references are captured
+
+# Define a function to extract the publication year from a reference block
+extract_year <- function(ref) {
+  # Find all occurrences of a four-digit number in parentheses
+  matches <- str_extract_all(ref, "\\(\\d{4}\\)")[[1]]
+  if (length(matches) > 0) {
+    # Use the last occurrence as the publication year
+    as.numeric(gsub("[()]", "", tail(matches, 1)))
+  } else {
+    NA
+  }
+}
+
+# Extract years for each reference block
+years <- sapply(refs_combined, extract_year)
+# Remove any NAs (if a reference did not yield a year)
+years <- years[!is.na(years)]
+
+# Verify that the number of extracted years matches the number of references
+cat("Total references with a detected year:", length(years), "\n")
+
+# Create a frequency table for the years
+year_counts <- as.data.frame(table(years))
+colnames(year_counts) <- c("Year", "Count")
+year_counts$Year <- as.numeric(as.character(year_counts$Year))
+year_counts <- year_counts[order(year_counts$Year), ]
+
+# Append a row for the total count
+year_counts_total <- rbind(
+  year_counts,
+  data.frame(Year = "Total", Count = total_refs)
+)
+
+# Print the table
+print(year_counts_total, row.names = FALSE)
+
+# Plot the distribution using ggplot2
+ggplot(year_counts, aes(x = factor(Year, levels = sort(unique(Year))), y = Count)) +
+  geom_col(fill = "red") +
+  geom_text(aes(label = Count), vjust = -0.5, size = 3.5) +
+  labs(
+    x = "Publication Year",
+    y = "Number of References",
+    title = "Distribution of References by Year"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
